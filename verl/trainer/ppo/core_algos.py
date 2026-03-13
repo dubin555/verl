@@ -631,6 +631,10 @@ def compute_rloo_outcome_advantage(
                 scores[i] = scores[i] * response_num / (response_num - 1) - id2mean[index[i]] * response_num / (
                     response_num - 1
                 )
+            else:
+                # Single-sample group: no leave-one-out baseline possible, set advantage to 0
+                # This matches the behavior of rloo_vectorized: `* (c > 1)`
+                scores[i] = 0.0
         scores = scores.unsqueeze(-1) * response_mask
 
     return scores, scores
