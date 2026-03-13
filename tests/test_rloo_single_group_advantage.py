@@ -1,3 +1,15 @@
+# Copyright 2025 Individual Contributor: dubin555
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 CPU test to verify RLOO non-vectorized handles single-sample groups correctly.
 
@@ -12,9 +24,10 @@ This creates an inconsistency where switching from "rloo" to "rloo_vectorized" c
 training behavior for single-sample groups.
 """
 
+from collections import defaultdict
+
 import numpy as np
 import torch
-from collections import defaultdict
 
 
 def rloo_non_vec_buggy(token_level_rewards, response_mask, index):
@@ -34,9 +47,8 @@ def rloo_non_vec_buggy(token_level_rewards, response_mask, index):
         for i in range(bsz):
             response_num = len(id2score[index[i]])
             if response_num > 1:
-                scores[i] = (
-                    scores[i] * response_num / (response_num - 1)
-                    - id2mean[index[i]] * response_num / (response_num - 1)
+                scores[i] = scores[i] * response_num / (response_num - 1) - id2mean[index[i]] * response_num / (
+                    response_num - 1
                 )
             # BUG: no else branch → single-sample groups keep raw score
         scores = scores.unsqueeze(-1) * response_mask
@@ -60,9 +72,8 @@ def rloo_non_vec_fixed(token_level_rewards, response_mask, index):
         for i in range(bsz):
             response_num = len(id2score[index[i]])
             if response_num > 1:
-                scores[i] = (
-                    scores[i] * response_num / (response_num - 1)
-                    - id2mean[index[i]] * response_num / (response_num - 1)
+                scores[i] = scores[i] * response_num / (response_num - 1) - id2mean[index[i]] * response_num / (
+                    response_num - 1
                 )
             else:
                 scores[i] = 0.0
@@ -83,16 +94,20 @@ def rloo_vectorized(token_level_rewards, response_mask, index):
 
 def test_buggy_single_group_nonzero():
     """Demonstrate bug: non-vectorized RLOO gives non-zero advantage for single-sample groups."""
-    rewards = torch.tensor([
-        [0, 0, 5.0, 0],  # group A (single sample), score=5
-        [0, 0, 3.0, 0],  # group B, score=3
-        [0, 0, 7.0, 0],  # group B, score=7
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 5.0, 0],  # group A (single sample), score=5
+            [0, 0, 3.0, 0],  # group B, score=3
+            [0, 0, 7.0, 0],  # group B, score=7
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "B", "B"])
 
     adv_buggy = rloo_non_vec_buggy(rewards.clone(), mask, index)
@@ -105,16 +120,20 @@ def test_buggy_single_group_nonzero():
 
 def test_vectorized_single_group_zero():
     """Vectorized RLOO correctly gives 0 advantage for single-sample groups."""
-    rewards = torch.tensor([
-        [0, 0, 5.0, 0],
-        [0, 0, 3.0, 0],
-        [0, 0, 7.0, 0],
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 5.0, 0],
+            [0, 0, 3.0, 0],
+            [0, 0, 7.0, 0],
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "B", "B"])
 
     adv_vec = rloo_vectorized(rewards.clone(), mask, index)
@@ -127,24 +146,28 @@ def test_vectorized_single_group_zero():
 
 def test_fixed_matches_vectorized():
     """Fixed non-vectorized RLOO matches vectorized for all cases."""
-    rewards = torch.tensor([
-        [0, 0, 5.0, 0],   # group A (single)
-        [0, 0, 3.0, 0],   # group B
-        [0, 0, 7.0, 0],   # group B
-        [0, 0, 10.0, 0],  # group C (single)
-        [0, 0, 1.0, 0],   # group D
-        [0, 0, 2.0, 0],   # group D
-        [0, 0, 3.0, 0],   # group D
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 5.0, 0],  # group A (single)
+            [0, 0, 3.0, 0],  # group B
+            [0, 0, 7.0, 0],  # group B
+            [0, 0, 10.0, 0],  # group C (single)
+            [0, 0, 1.0, 0],  # group D
+            [0, 0, 2.0, 0],  # group D
+            [0, 0, 3.0, 0],  # group D
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "B", "B", "C", "D", "D", "D"])
 
     adv_fixed = rloo_non_vec_fixed(rewards.clone(), mask, index)
@@ -160,18 +183,22 @@ def test_fixed_matches_vectorized():
 
 def test_multi_sample_groups_unchanged():
     """Fix should not change behavior for multi-sample groups."""
-    rewards = torch.tensor([
-        [0, 0, 3.0, 0],
-        [0, 0, 7.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 5.0, 0],
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 3.0, 0],
+            [0, 0, 7.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 5.0, 0],
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "A", "B", "B"])
 
     adv_buggy = rloo_non_vec_buggy(rewards.clone(), mask, index)
@@ -187,16 +214,20 @@ def test_multi_sample_groups_unchanged():
 
 def test_all_single_groups():
     """Edge case: every group has exactly 1 sample."""
-    rewards = torch.tensor([
-        [0, 0, 5.0, 0],
-        [0, 0, 10.0, 0],
-        [0, 0, -3.0, 0],
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 5.0, 0],
+            [0, 0, 10.0, 0],
+            [0, 0, -3.0, 0],
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "B", "C"])
 
     adv_fixed = rloo_non_vec_fixed(rewards.clone(), mask, index)
@@ -211,27 +242,33 @@ def test_all_single_groups():
 
 def test_rloo_formula_correctness():
     """Verify the RLOO formula: A_i = r_i - (1/(N-1)) * sum_{j!=i} r_j."""
-    rewards = torch.tensor([
-        [0, 0, 2.0, 0],
-        [0, 0, 4.0, 0],
-        [0, 0, 6.0, 0],
-    ])
-    mask = torch.tensor([
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-        [0, 0, 1.0, 0],
-    ])
+    rewards = torch.tensor(
+        [
+            [0, 0, 2.0, 0],
+            [0, 0, 4.0, 0],
+            [0, 0, 6.0, 0],
+        ]
+    )
+    mask = torch.tensor(
+        [
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+            [0, 0, 1.0, 0],
+        ]
+    )
     index = np.array(["A", "A", "A"])
 
     # Manual RLOO computation:
     # A_0 = 2 - (4+6)/2 = 2 - 5 = -3
     # A_1 = 4 - (2+6)/2 = 4 - 4 = 0
     # A_2 = 6 - (2+4)/2 = 6 - 3 = 3
-    expected = torch.tensor([
-        [0, 0, -3.0, 0],
-        [0, 0, 0.0, 0],
-        [0, 0, 3.0, 0],
-    ])
+    expected = torch.tensor(
+        [
+            [0, 0, -3.0, 0],
+            [0, 0, 0.0, 0],
+            [0, 0, 3.0, 0],
+        ]
+    )
 
     adv_fixed = rloo_non_vec_fixed(rewards.clone(), mask, index)
     adv_vec = rloo_vectorized(rewards.clone(), mask, index)
